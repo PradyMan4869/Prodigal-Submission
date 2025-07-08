@@ -1,0 +1,20 @@
+ 
+apiVersion: v1
+kind: Service
+metadata:
+  # The name of our service
+  name: cpu-loader-service
+spec:
+  # This makes the service accessible from outside the cluster.
+  # Minikube has a special way of handling this type.
+  type: NodePort
+  selector:
+    # This selector tells the Service which pods to send traffic to.
+    # It must match the labels on our pods from the Deployment.
+    app: cpu-loader
+  ports:
+    - protocol: TCP
+      # The port on the Service itself
+      port: 8000
+      # The port on the Pods to forward traffic to
+      targetPort: 8000

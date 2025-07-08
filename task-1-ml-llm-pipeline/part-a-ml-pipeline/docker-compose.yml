@@ -1,0 +1,123 @@
+version: '3.8'
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.8.1-python3.9
+  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
+  env_file:
+    - .env
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./scripts:/opt/airflow/scripts
+    - ./data:/opt/airflow/data
+    - ./mlruns:/opt/airflow/mlruns
+    - airflow_logs_volume:/opt/airflow/logs
+    - shared_model_volume:/opt/airflow/model
+    - spark_data_volume:/opt/airflow/processed_data
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: postgres_airflow
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres_db_volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow_init
+    entrypoint: /bin/bash
+    command: -c "airflow db init && airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow_webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow_scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "airflow", "jobs", "check", "--job-type", "SchedulerJob", "--hostname", "$${HOSTNAME}"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.1
+    container_name: mlflow_server
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./mlruns:/mlruns
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri file:///mlruns
+    
+  spark-master:
+    image: bitnami/spark:3
+    container_name: spark_master
+    command: bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "9090:8080"
+      - "7077:7077"
+    volumes:
+      - ./scripts:/opt/bitnami/spark/scripts
+      - ./data:/opt/bitnami/spark/data
+      - spark_data_volume:/opt/bitnami/spark/processed_data
+
+  spark-worker:
+    image: bitnami/spark:3
+    container_name: spark_worker
+    command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/opt/bitnami/spark/scripts
+      - ./data:/opt/bitnami/spark/data
+      - spark_data_volume:/opt/bitnami/spark/processed_data
+      
+  prediction_api:
+    container_name: prediction_api
+    build: ./api
+    ports:
+      - "8000:8000"
+    volumes:
+      - shared_model_volume:/app/model
+    environment:
+      - MODEL_PATH=/app/model/model.pkl
+    depends_on:
+      - airflow-scheduler
+
+volumes:
+  postgres_db_volume:
+  airflow_logs_volume:
+  spark_data_volume:
+  shared_model_volume:

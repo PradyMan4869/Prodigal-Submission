@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+langchain
+langchain-community
+torch
+sentence-transformers
+faiss-cpu
+pypdf
+langchain-huggingface
+accelerate

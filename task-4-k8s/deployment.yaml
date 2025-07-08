@@ -1,0 +1,42 @@
+ 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # The name of our deployment
+  name: cpu-loader-deployment
+spec:
+  # We want to start with 1 replica (copy) of our app
+  replicas: 1
+  selector:
+    # This selector tells the Deployment which pods to manage.
+    # It must match the labels in the Pod template below.
+    matchLabels:
+      app: cpu-loader
+  template:
+    # This is the template for the Pods that will be created.
+    metadata:
+      labels:
+        # The label for our pods
+        app: cpu-loader
+    spec:
+      containers:
+      - name: cpu-loader-container
+        # The Docker image to use. We will build this and push it to Minikube's registry.
+        image: cpu-loader-app:latest
+        # This is important! We must never use the 'latest' tag in production.
+        # This tells Kubernetes to always pull a new image if one exists,
+        # even if the tag is the same.
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        # --- THIS IS CRITICAL FOR HPA ---
+        # We MUST define resource requests for the HPA to work.
+        # This tells the HPA what 50% CPU usage means. 50% of what? 50% of this request.
+        resources:
+          requests:
+            # "200m" means 200 millicores, which is 0.2 CPU cores.
+            cpu: "200m"
+          limits:
+            # We also set a hard limit to prevent a runaway process from
+            # crashing the entire node.
+            cpu: "500m"

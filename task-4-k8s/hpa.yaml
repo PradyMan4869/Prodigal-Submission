@@ -1,0 +1,27 @@
+apiVersion: autoscaling/v2
+# --- THIS LINE WAS MISSING ---
+kind: HorizontalPodAutoscaler
+metadata:
+  # The name of our HPA
+  name: cpu-loader-hpa
+spec:
+  # This tells the HPA which Deployment it should be scaling.
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cpu-loader-deployment
+  # The minimum number of replicas we want to have
+  minReplicas: 1
+  # The maximum number of replicas we want to scale up to
+  maxReplicas: 10
+  # The metrics to use for scaling decisions
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      # The target value for the metric
+      target:
+        type: Utilization
+        # We want to scale up when the average CPU utilization across all pods
+        # exceeds 50% of their requested CPU (50% of 200m from the deployment).
+        averageUtilization: 50

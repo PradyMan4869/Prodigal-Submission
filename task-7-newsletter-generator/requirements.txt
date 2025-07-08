@@ -1,0 +1,11 @@
+langchain
+langchain-community
+langchain-openai
+beautifulsoup4
+requests
+newspaper3k
+scikit-learn
+python-telegram-bot==21.0.1
+schedule
+python-dotenv
+tiktoken
